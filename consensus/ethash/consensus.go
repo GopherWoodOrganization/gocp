@@ -321,21 +321,22 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainHeaderReader, time uin
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
 func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {
-	next := new(big.Int).Add(parent.Number, big1)
-	switch {
-	case config.IsCatalyst(next):
-		return big.NewInt(1)
-	case config.IsMuirGlacier(next):
-		return calcDifficultyEip2384(time, parent)
-	case config.IsConstantinople(next):
-		return calcDifficultyConstantinople(time, parent)
-	case config.IsByzantium(next):
-		return calcDifficultyByzantium(time, parent)
-	case config.IsHomestead(next):
-		return calcDifficultyHomestead(time, parent)
-	default:
-		return calcDifficultyFrontier(time, parent)
-	}
+	return calcDifficultyGocp(time, parent)
+	//next := new(big.Int).Add(parent.Number, big1)
+	//switch {
+	//case config.IsCatalyst(next):
+	//	return big.NewInt(1)
+	//case config.IsMuirGlacier(next):
+	//	return calcDifficultyEip2384(time, parent)
+	//case config.IsConstantinople(next):
+	//	return calcDifficultyConstantinople(time, parent)
+	//case config.IsByzantium(next):
+	//	return calcDifficultyByzantium(time, parent)
+	//case config.IsHomestead(next):
+	//	return calcDifficultyHomestead(time, parent)
+	//default:
+	//	return calcDifficultyFrontier(time, parent)
+	//}
 }
 
 // Some weird constants to avoid constant memory allocs for them.
@@ -490,6 +491,27 @@ func calcDifficultyFrontier(time uint64, parent *types.Header) *big.Int {
 		diff.Add(diff, expDiff)
 		diff = math.BigMax(diff, params.MinimumDifficulty)
 	}
+	return diff
+}
+
+func calcDifficultyGocp(time uint64, parent *types.Header) *big.Int {
+	diff := new(big.Int)
+	adjust := new(big.Int).Div(parent.Difficulty, params.DifficultyBoundDivisor)
+	bigTime := new(big.Int)
+	bigParentTime := new(big.Int)
+
+	bigTime.SetUint64(time)
+	bigParentTime.SetUint64(parent.Time)
+
+	if bigTime.Sub(bigTime, bigParentTime).Cmp(params.DurationLimit) < 0 {
+		diff.Add(parent.Difficulty, adjust)
+	} else {
+		diff.Sub(parent.Difficulty, adjust)
+	}
+	if diff.Cmp(params.MinimumDifficulty) < 0 {
+		diff.Set(params.MinimumDifficulty)
+	}
+
 	return diff
 }
 
