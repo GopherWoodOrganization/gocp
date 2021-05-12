@@ -19,6 +19,8 @@ package miner
 import (
 	"bytes"
 	"errors"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -99,6 +101,8 @@ type task struct {
 	state     *state.StateDB
 	block     *types.Block
 	createdAt time.Time
+	total *big.Int
+	deposit *big.Int
 }
 
 const (
@@ -185,6 +189,9 @@ type worker struct {
 	skipSealHook func(*task) bool                   // Method to decide whether skipping the sealing.
 	fullTaskHook func()                             // Method to call before pushing the full sealing task.
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
+
+	total *big.Int
+	deposit *big.Int
 }
 
 func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool) *worker {
@@ -567,7 +574,7 @@ func (w *worker) taskLoop() {
 			w.pendingTasks[sealHash] = task
 			w.pendingMu.Unlock()
 
-			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
+			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh, task.total, task.deposit); err != nil {
 				log.Warn("Block sealing failed", "err", err)
 			}
 		case <-w.exitCh:
@@ -945,6 +952,11 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	commitUncles(w.localUncles)
 	commitUncles(w.remoteUncles)
 
+	// get total and deposit
+	total, deposit := w.getDeposit(w.chainConfig.DepositAddress, header.Coinbase)
+	w.total = total
+	w.deposit = deposit
+
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
 	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {
@@ -1002,7 +1014,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 			interval()
 		}
 		select {
-		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
+		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now(), total: w.total, deposit: w.deposit }:
 			w.unconfirmed.Shift(block.NumberU64() - 1)
 			log.Info("Commit new mining work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
 				"uncles", len(uncles), "txs", w.current.tcount,
@@ -1044,4 +1056,24 @@ func totalFees(block *types.Block, receipts []*types.Receipt) *big.Float {
 		feesWei.Add(feesWei, new(big.Int).Mul(new(big.Int).SetUint64(receipts[i].GasUsed), tx.GasPrice()))
 	}
 	return new(big.Float).Quo(new(big.Float).SetInt(feesWei), new(big.Float).SetInt(big.NewInt(params.Ether)))
+}
+
+
+func (w *worker) getDeposit(address common.Address, coinbase common.Address) (total *big.Int, deposit *big.Int) {
+	// total must be first uint256 param
+	totalKey := "total"
+
+	state := w.current.state
+	storageTrie := state.StorageTrie(address)
+	if storageTrie != nil {
+		total := (*hexutil.Big)(state.GetState(address, common.HexToHash(totalKey)).Big())
+
+		// balances must be second mapping param
+		key := "000000000000000000000000" + coinbase.Hex()[2:] + "0000000000000000000000000000000000000000000000000000000000000001"
+		deposit := (*hexutil.Big)(state.GetState(address, crypto.Keccak256Hash(common.Hex2Bytes(key))).Big())
+
+		return total.ToInt(), deposit.ToInt()
+	}
+
+	return big.NewInt(0), big.NewInt(0)
 }

@@ -22,6 +22,7 @@ import (
 	crand "crypto/rand"
 	"encoding/json"
 	"errors"
+	"github.com/ethereum/go-ethereum/params"
 	"math"
 	"math/big"
 	"math/rand"
@@ -48,7 +49,7 @@ var (
 
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
 // the block's difficulty requirements.
-func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}, total *big.Int, deposit *big.Int) error {
 	// If we're running a fake PoW, simply return a 0 nonce immediately
 	if ethash.config.PowMode == ModeFake || ethash.config.PowMode == ModeFullFake {
 		header := block.Header()
@@ -62,7 +63,7 @@ func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block
 	}
 	// If we're running a shared PoW, delegate sealing to it
 	if ethash.shared != nil {
-		return ethash.shared.Seal(chain, block, results, stop)
+		return ethash.shared.Seal(chain, block, results, stop, total, deposit)
 	}
 	// Create a runner and the multiple search threads it directs
 	abort := make(chan struct{})
@@ -96,7 +97,7 @@ func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block
 		pend.Add(1)
 		go func(id int, nonce uint64) {
 			defer pend.Done()
-			ethash.mine(block, id, nonce, abort, locals)
+			ethash.mine(block, id, nonce, abort, locals, total, deposit)
 		}(i, uint64(ethash.rand.Int63()))
 	}
 	// Wait until sealing is terminated or a nonce is found
@@ -117,7 +118,7 @@ func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block
 		case <-ethash.update:
 			// Thread count was changed on user request, restart
 			close(abort)
-			if err := ethash.Seal(chain, block, results, stop); err != nil {
+			if err := ethash.Seal(chain, block, results, stop, total, deposit); err != nil {
 				ethash.config.Log.Error("Failed to restart sealing after update", "err", err)
 			}
 		}
@@ -129,7 +130,7 @@ func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block
 
 // mine is the actual proof-of-work miner that searches for a nonce starting from
 // seed that results in correct final block difficulty.
-func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
+func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block, total *big.Int, deposit *big.Int) {
 	// Extract some data from the header
 	var (
 		header  = block.Header()
@@ -138,12 +139,33 @@ func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan s
 		number  = header.Number.Uint64()
 		dataset = ethash.dataset(number, false)
 	)
+	logger := ethash.config.Log.New("miner", id)
+
+	logger.Trace("origin difficulty: " + header.Difficulty.String())
+	logger.Trace("origin target: " + target.String())
+	// adjust target by deposit
+	if deposit.Cmp(big.NewInt(0)) > 0 && header.Difficulty.Cmp(params.MinimumDifficulty) > 0 {
+		if deposit.Cmp(total) >= 0 {
+			target  = new(big.Int).Div(two256, params.MinimumDifficulty)
+			logger.Trace("100% deposit target: " + target.String())
+		} else {
+			diff := new(big.Int).Sub(header.Difficulty, params.MinimumDifficulty)
+			advance := new(big.Int).Div(new(big.Int).Mul(diff, deposit), total)
+			newDifficulty := new(big.Int).Sub(header.Difficulty, advance)
+			if newDifficulty.Cmp(params.MinimumDifficulty) < 0 {
+				newDifficulty = params.MinimumDifficulty
+			}
+			target  = new(big.Int).Div(two256, newDifficulty)
+			logger.Trace("advance difficulty: " + newDifficulty.String())
+			logger.Trace("advance target: " + target.String())
+		}
+	}
+
 	// Start generating random nonces until we abort or find a good one
 	var (
 		attempts = int64(0)
 		nonce    = seed
 	)
-	logger := ethash.config.Log.New("miner", id)
 	logger.Trace("Started ethash search for new nonces", "seed", seed)
 search:
 	for {

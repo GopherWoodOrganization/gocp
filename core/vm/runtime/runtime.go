@@ -67,6 +67,7 @@ func setDefaults(cfg *Config) {
 			MuirGlacierBlock:    new(big.Int),
 			BerlinBlock:         new(big.Int),
 			YoloV3Block:         nil,
+			DepositAddress:      common.Hash{},
 		}
 	}
 
