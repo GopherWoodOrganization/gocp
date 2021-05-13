@@ -143,6 +143,8 @@ func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan s
 
 	logger.Info("origin difficulty: " + header.Difficulty.String())
 	logger.Info("origin target: " + target.String())
+	logger.Info("origin total: " + total.String())
+	logger.Info("origin deposit: " + deposit.String())
 	// adjust target by deposit
 	if deposit.Cmp(big.NewInt(0)) > 0 && header.Difficulty.Cmp(params.MinimumDifficulty) > 0 {
 		if deposit.Cmp(total) >= 0 {

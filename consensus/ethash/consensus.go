@@ -581,16 +581,18 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainHeaderReader, header *type
 	}
 	target := new(big.Int).Div(two256, header.Difficulty)
 
-	logger := ethash.config.Log.New("ethash verify seal")
+	logger := ethash.config.Log.New("verify", 0)
 
 	total, deposit := ethash.getDeposit(header.Root, ethash.config.DepositAddress, header.Coinbase)
-	logger.Info("verify seal origin difficulty: " + header.Difficulty.String())
-	logger.Info("verify seal origin target: " + target.String())
+	logger.Info("seal origin difficulty: " + header.Difficulty.String())
+	logger.Info("seal origin target: " + target.String())
+	logger.Info("seal origin total: " + total.String())
+	logger.Info("seal origin deposit: " + deposit.String())
 	// adjust target by deposit
 	if deposit.Cmp(big.NewInt(0)) > 0 && header.Difficulty.Cmp(params.MinimumDifficulty) > 0 {
 		if deposit.Cmp(total) >= 0 {
 			target = new(big.Int).Div(two256, params.MinimumDifficulty)
-			logger.Info("verify seal 100% deposit target: " + target.String())
+			logger.Info("seal 100% deposit target: " + target.String())
 		} else {
 			diff := new(big.Int).Sub(header.Difficulty, params.MinimumDifficulty)
 			advance := new(big.Int).Div(new(big.Int).Mul(diff, deposit), total)
@@ -599,8 +601,8 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainHeaderReader, header *type
 				newDifficulty = params.MinimumDifficulty
 			}
 			target = new(big.Int).Div(two256, newDifficulty)
-			logger.Info("verify seal advance difficulty: " + newDifficulty.String())
-			logger.Info("verify seal advance target: " + target.String())
+			logger.Info("seal advance difficulty: " + newDifficulty.String())
+			logger.Info("seal advance target: " + target.String())
 		}
 	}
 
