@@ -580,6 +580,30 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainHeaderReader, header *type
 		return errInvalidMixDigest
 	}
 	target := new(big.Int).Div(two256, header.Difficulty)
+
+	logger := ethash.config.Log.New("ethash verify seal")
+
+	total, deposit := ethash.getDeposit(header.Root, ethash.config.DepositAddress, header.Coinbase)
+	logger.Info("verify seal origin difficulty: " + header.Difficulty.String())
+	logger.Info("verify seal origin target: " + target.String())
+	// adjust target by deposit
+	if deposit.Cmp(big.NewInt(0)) > 0 && header.Difficulty.Cmp(params.MinimumDifficulty) > 0 {
+		if deposit.Cmp(total) >= 0 {
+			target = new(big.Int).Div(two256, params.MinimumDifficulty)
+			logger.Info("verify seal 100% deposit target: " + target.String())
+		} else {
+			diff := new(big.Int).Sub(header.Difficulty, params.MinimumDifficulty)
+			advance := new(big.Int).Div(new(big.Int).Mul(diff, deposit), total)
+			newDifficulty := new(big.Int).Sub(header.Difficulty, advance)
+			if newDifficulty.Cmp(params.MinimumDifficulty) < 0 {
+				newDifficulty = params.MinimumDifficulty
+			}
+			target = new(big.Int).Div(two256, newDifficulty)
+			logger.Info("verify seal advance difficulty: " + newDifficulty.String())
+			logger.Info("verify seal advance target: " + target.String())
+		}
+	}
+
 	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
 		return errInvalidPoW
 	}

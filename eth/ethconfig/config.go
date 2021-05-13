@@ -229,7 +229,8 @@ func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, co
 		DatasetsOnDisk:   config.DatasetsOnDisk,
 		DatasetsLockMmap: config.DatasetsLockMmap,
 		NotifyFull:       config.NotifyFull,
-	}, notify, noverify)
+		DepositAddress: chainConfig.DepositAddress,
+	}, notify, noverify, db)
 	engine.SetThreads(-1) // Disable CPU mining
 	return engine
 }

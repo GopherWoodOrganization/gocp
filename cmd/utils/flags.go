@@ -1844,7 +1844,8 @@ func MakeChain(ctx *cli.Context, stack *node.Node) (chain *core.BlockChain, chai
 				DatasetsInMem:    ethconfig.Defaults.Ethash.DatasetsInMem,
 				DatasetsOnDisk:   ethconfig.Defaults.Ethash.DatasetsOnDisk,
 				DatasetsLockMmap: ethconfig.Defaults.Ethash.DatasetsLockMmap,
-			}, nil, false)
+				DepositAddress: config.DepositAddress,
+			}, nil, false, chainDb)
 		}
 	}
 	if gcmode := ctx.GlobalString(GCModeFlag.Name); gcmode != "full" && gcmode != "archive" {
