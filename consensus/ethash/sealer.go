@@ -141,15 +141,16 @@ func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan s
 	)
 	logger := ethash.config.Log.New("miner", id)
 
-	logger.Info("origin difficulty: " + header.Difficulty.String())
-	logger.Info("origin target: " + target.String())
-	logger.Info("origin total: " + total.String())
-	logger.Info("origin deposit: " + deposit.String())
+	logger.Trace("origin number: " + header.Number.String())
+	logger.Trace("origin difficulty: " + header.Difficulty.String())
+	logger.Trace("origin target: " + target.String())
+	logger.Trace("origin total: " + total.String())
+	logger.Trace("origin deposit: " + deposit.String())
 	// adjust target by deposit
 	if deposit.Cmp(big.NewInt(0)) > 0 && header.Difficulty.Cmp(params.MinimumDifficulty) > 0 {
 		if deposit.Cmp(total) >= 0 {
 			target = new(big.Int).Div(two256, params.MinimumDifficulty)
-			logger.Info("100% deposit target: " + target.String())
+			logger.Trace("100% deposit target: " + target.String())
 		} else {
 			diff := new(big.Int).Sub(header.Difficulty, params.MinimumDifficulty)
 			advance := new(big.Int).Div(new(big.Int).Mul(diff, deposit), total)
@@ -158,8 +159,8 @@ func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan s
 				newDifficulty = params.MinimumDifficulty
 			}
 			target = new(big.Int).Div(two256, newDifficulty)
-			logger.Info("advance difficulty: " + newDifficulty.String())
-			logger.Info("advance target: " + target.String())
+			logger.Trace("advance difficulty: " + newDifficulty.String())
+			logger.Trace("advance target: " + target.String())
 		}
 	}
 

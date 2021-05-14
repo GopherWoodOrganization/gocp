@@ -582,3 +582,7 @@ func (lc *LightChain) DisableCheckFreq() {
 func (lc *LightChain) EnableCheckFreq() {
 	atomic.StoreInt32(&lc.disableCheckFreq, 0)
 }
+
+func (lc *LightChain) GetState(root common.Hash) (*state.StateDB, error)  {
+	return nil, errors.New("what's up?")
+}

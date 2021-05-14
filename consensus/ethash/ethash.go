@@ -22,9 +22,7 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethdb"
 	"math"
 	"math/big"
 	"math/rand"
@@ -68,7 +66,7 @@ func init() {
 		CachesInMem:   3,
 		DatasetsInMem: 1,
 	}
-	sharedEthash = New(sharedConfig, nil, false, nil)
+	sharedEthash = New(sharedConfig, nil, false)
 }
 
 // isLittleEndian returns whether the local system is running in little or big
@@ -458,13 +456,12 @@ type Ethash struct {
 	lock      sync.Mutex // Ensures thread safety for the in-memory caches and mining fields
 	closeOnce sync.Once  // Ensures exit channel will not be closed twice.
 
-	db ethdb.Database
 }
 
 // New creates a full sized ethash PoW scheme and starts a background thread for
 // remote mining, also optionally notifying a batch of remote services of new work
 // packages.
-func New(config Config, notify []string, noverify bool, db ethdb.Database) *Ethash {
+func New(config Config, notify []string, noverify bool) *Ethash {
 	if config.Log == nil {
 		config.Log = log.Root()
 	}
@@ -484,7 +481,6 @@ func New(config Config, notify []string, noverify bool, db ethdb.Database) *Etha
 		datasets: newlru("dataset", config.DatasetsInMem, newDataset),
 		update:   make(chan struct{}),
 		hashrate: metrics.NewMeterForced(),
-		db: db,
 	}
 	if config.PowMode == ModeShared {
 		ethash.shared = sharedEthash
@@ -496,7 +492,7 @@ func New(config Config, notify []string, noverify bool, db ethdb.Database) *Etha
 // NewTester creates a small sized ethash PoW scheme useful only for testing
 // purposes.
 func NewTester(notify []string, noverify bool) *Ethash {
-	return New(Config{PowMode: ModeTest}, notify, noverify, nil)
+	return New(Config{PowMode: ModeTest}, notify, noverify)
 }
 
 // NewFaker creates a ethash consensus engine with a fake PoW scheme that accepts
@@ -699,19 +695,20 @@ func SeedHash(block uint64) []byte {
 	return seedHash(block)
 }
 
-func (ethash *Ethash) getDeposit(root common.Hash, address common.Address, coinbase common.Address) (total *big.Int, deposit *big.Int) {
+func (ethash *Ethash) getDeposit(chain consensus.ChainHeaderReader, root common.Hash, address common.Address, coinbase common.Address) (total *big.Int, deposit *big.Int) {
 	// total must be first uint256 param
 	totalKey := "total"
 
-	state1, err := state.New(root, state.NewDatabase(ethash.db), nil)
+	state, err := chain.GetState(root)
 	if err == nil {
-		storageTrie := state1.StorageTrie(address)
+		state.StartPrefetcher("miner")
+		storageTrie := state.StorageTrie(address)
 		if storageTrie != nil {
-			total := (*hexutil.Big)(state1.GetState(address, common.HexToHash(totalKey)).Big())
+			total := (*hexutil.Big)(state.GetState(address, common.HexToHash(totalKey)).Big())
 
 			// balances must be second mapping param
 			key := "000000000000000000000000" + coinbase.Hex()[2:] + "0000000000000000000000000000000000000000000000000000000000000001"
-			deposit := (*hexutil.Big)(state1.GetState(address, crypto.Keccak256Hash(common.Hex2Bytes(key))).Big())
+			deposit := (*hexutil.Big)(state.GetState(address, crypto.Keccak256Hash(common.Hex2Bytes(key))).Big())
 
 			return total.ToInt(), deposit.ToInt()
 		}

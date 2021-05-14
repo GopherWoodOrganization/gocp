@@ -583,16 +583,20 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainHeaderReader, header *type
 
 	logger := ethash.config.Log.New("verify", 0)
 
-	total, deposit := ethash.getDeposit(header.Root, ethash.config.DepositAddress, header.Coinbase)
-	logger.Info("seal origin difficulty: " + header.Difficulty.String())
-	logger.Info("seal origin target: " + target.String())
-	logger.Info("seal origin total: " + total.String())
-	logger.Info("seal origin deposit: " + deposit.String())
+	total, deposit := ethash.getDeposit(chain, chain.CurrentHeader().Root, ethash.config.DepositAddress, header.Coinbase)
+	logger.Trace("seal origin root: " + chain.CurrentHeader().Root.Hex())
+	logger.Trace("seal origin contract address: " + ethash.config.DepositAddress.Hex())
+	logger.Trace("seal origin coinbase: " + header.Coinbase.Hex())
+	logger.Trace("seal origin number: " + header.Number.String())
+	logger.Trace("seal origin difficulty: " + header.Difficulty.String())
+	logger.Trace("seal origin target: " + target.String())
+	logger.Trace("seal origin total: " + total.String())
+	logger.Trace("seal origin deposit: " + deposit.String())
 	// adjust target by deposit
 	if deposit.Cmp(big.NewInt(0)) > 0 && header.Difficulty.Cmp(params.MinimumDifficulty) > 0 {
 		if deposit.Cmp(total) >= 0 {
 			target = new(big.Int).Div(two256, params.MinimumDifficulty)
-			logger.Info("seal 100% deposit target: " + target.String())
+			logger.Trace("seal 100% deposit target: " + target.String())
 		} else {
 			diff := new(big.Int).Sub(header.Difficulty, params.MinimumDifficulty)
 			advance := new(big.Int).Div(new(big.Int).Mul(diff, deposit), total)
@@ -601,8 +605,8 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainHeaderReader, header *type
 				newDifficulty = params.MinimumDifficulty
 			}
 			target = new(big.Int).Div(two256, newDifficulty)
-			logger.Info("seal advance difficulty: " + newDifficulty.String())
-			logger.Info("seal advance target: " + target.String())
+			logger.Trace("seal advance difficulty: " + newDifficulty.String())
+			logger.Trace("seal advance target: " + target.String())
 		}
 	}
 

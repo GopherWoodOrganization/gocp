@@ -2510,3 +2510,7 @@ func (bc *BlockChain) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscript
 func (bc *BlockChain) SubscribeBlockProcessingEvent(ch chan<- bool) event.Subscription {
 	return bc.scope.Track(bc.blockProcFeed.Subscribe(ch))
 }
+
+func (bc *BlockChain) GetState(root common.Hash) (*state.StateDB, error) {
+	return bc.StateAt(root)
+}

@@ -953,6 +953,10 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	commitUncles(w.remoteUncles)
 
 	// get total and deposit
+	log.Trace("origin number: " + w.chain.CurrentHeader().Number.String())
+	log.Trace("origin root: " + w.chain.CurrentHeader().Root.Hex())
+	log.Trace("origin contract address: " + w.chainConfig.DepositAddress.Hex())
+	log.Trace("origin coinbase: " + header.Coinbase.Hex())
 	total, deposit := w.getDeposit(w.chainConfig.DepositAddress, header.Coinbase)
 	w.total = total
 	w.deposit = deposit
